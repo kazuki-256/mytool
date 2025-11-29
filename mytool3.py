@@ -100,28 +100,28 @@ def ask_file(file_types: list = [tuple[str, str]]):
 # == video method ==
 
 def load_video(file = None):
-    global cv2;
-    cv2 = load_library(cv2, "cv2", "opencv-python");
+	global cv2;
+	cv2 = load_library(cv2, "cv2", "opencv-python");
 
-    type_file = type(file);
+	type_file = type(file);
 
-    if (type_file == cv2.VideoCapture):
-        return file;
+	if (type_file == cv2.VideoCapture):
+		return file;
 
-    if (type_file == str):
-        return cv2.VideoCapture(file);
+	if (type_file == str):
+		return cv2.VideoCapture(file);
 
-    if (video == None):
-        filename = ask_file([("Video files", "*.mp4 *.webm *.avi *.mov *.wmv *.flv"), ("All files", "*.*")]);
-    
-        if (not filename):
-            print("ERROR: No file chosen!");
-            return;
+	if (file == None):
+		filename = ask_file([("Video files", "*.mp4 *.webm *.avi *.mov *.wmv *.flv"), ("All files", "*.*")]);
 
-        video = cv2.VideoCapture(filename);
-        return video;
+		if (not filename):
+			print("ERROR: load_video: No file chosen!");
+			return;
 
-    return None;
+		video = cv2.VideoCapture(filename);
+		return video;
+
+	print("ERROR: load_video: invalid input type " + type_file.__name__);
 
 def get_video_width(video) -> int:
     return int(video.get(3));
@@ -201,7 +201,7 @@ def play_video(video = None, window_name: str = "play_video", fullscreen: bool =
         try:		# User closed window : Quit out
             cv2.getWindowProperty(window_name, 0);
         except:
-            print(f"NOTE: ウィンドウ {window_name} を閉じる!");
+            print(f"NOTE: play_video: ウィンドウ {window_name} を閉じる!");
             break;
 
         if (key == 27):
@@ -214,7 +214,7 @@ def play_video(video = None, window_name: str = "play_video", fullscreen: bool =
             screenshot_number += 1;
 
             cv2.imwrite(filename, frame);
-            print(f"NOTE: Screenshot saved to {filename}");
+            print(f"NOTE: play_video: Screenshot saved to {filename}");
             continue;
         
         if (key == ord(' ')):	# SPACE : Switch playing
@@ -225,7 +225,7 @@ def play_video(video = None, window_name: str = "play_video", fullscreen: bool =
         
         if (key == ord('l')):
             loop = not loop;
-            print("PlayVideo: Loop play is " + ("enable" if (loop) else "disable") + " now!");
+            print("NOTE: play_video: Loop play is " + ("enable" if (loop) else "disable") + " now!");
             if (loop == True and playing == False):
                 playing = True;
             continue;
@@ -273,31 +273,73 @@ def play_video(video = None, window_name: str = "play_video", fullscreen: bool =
 
 # == image ==
 
+def load_image(file: str|None = None):
+	global pil_image, numpy, cv2;
+	pil_image = load_library(pil_image, "PIL.Image", "pillow");
+
+	param_type = type(file);
+	if (param_type.__name__ == "numpy.ndarray"):
+		return file;
+
+	if (param_type == str):
+		cv2 = load_library(cv2, "cv2", "opencv-python");
+		return cv2.imread(file);
+
+	if (param_type.__name__.find("PIL.", 0, 0) == 0 and param_type.__name__.find("Image") != -1):
+		cv2 = load_library(cv2, "cv2", "opencv-python");
+		numpy = load_library(numpy, "numpy");
+
+		numpy_img = numpy.array(file);
+		return cv2.cvtColor(numpy_img, cv2.COLOR_RGB2BGR);
+
+	if (file == None):
+		filename = ask_file([("Image file", ".png *jpg *.jpeg *.ico"), ("All files", "*.*")]);
+
+		if (not filename):
+			print("ERROR: load_image: No file chosen!");
+			return;
+
+		video = cv2.VideoCapture(filename);
+		return video;
+
+	print("ERROR: load_image: invaild input type " + param_type.__name__);
+
 
 
 # == GIF ==
 
-def write_images_to_gif(frames: list|str, dest: str, duration: int, loop: int = 0):
-    frames_real = [];
+def write_images_to_gif(frames: list|str, output: str, duration: int, loop: int = 0):
+	global pil_image, cv2;
+	pil_image = load_library(pil_image, "PIL.Image", "pillow");
 
-    if (type(frames) == str):
-        global pil_image;
-        pil_image = load_library(pil_image, "PIL.Image", "pillow");
+	frames_real = [];
 
-        for file in os.listdir(frames):
-            if (not file.rsplit('.', 1)[1] in ("png", "jpg", "jpeg")):
-                continue;
-            
-            frames_real.append(pil_image.open(frames + os.sep + file));
+	if (type(frames) == str):
+		for file in os.listdir(frames):
+			if (not file.rsplit('.', 1)[1] in ("png", "jpg", "jpeg")):
+				continue;
+			
+			frames_real.append(pil_image.open(frames + os.sep + file));
 
-    elif (type(frames) == list):
-        frames_real = frames;
+	elif (type(frames) == list):
+		for frame in frames:
+			if (type(frame).__name__ == "numpy.ndarray"):
+				cv2 = load_library(cv2, "cv2", "opencv-python");
 
-    else:
-        raise Exception();
+				frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB);
+				frames_real.append(pil_image.fromarray(frame_rgb));
+				continue;
+		
+			frames_real.append(frame_rgb);
 
 
-    frames_real[0].save(dest, save_all=True, append_images=frames_real[1:], duration=int(duration), loop=loop);
+		frames_real = frames;
+
+	else:
+		raise Exception();
+
+
+	frames_real[0].save(output, save_all=True, append_images=frames_real[1:], duration=int(duration), loop=loop);
 
 
 
@@ -317,7 +359,7 @@ class clear_t:
         if (IS_WIN):
             os.system("cls");
         else:
-            print("\x1b[2J\x1b[0;0H", end="");
+            print("\x1b[2J\x1b[0;0H", end = "");
         return "";
 
 cls = CLS = clear = CLEAR = clear_t();
@@ -336,13 +378,13 @@ class chdir_t:
         try:
             os.chdir(path);
         except FileNotFoundError:
-            print("ERROR: Cwd: Couldn't find path!");
+            print("ERROR: chdir: Couldn't find path!");
 
-cd = CD = clear = CLEAR = chdir_t();
+cd = clear = chdir_t();
 
 
 
-class listdir_t:
+class list_dir_t:
 	def __repr__(self):
 		self.listdir();
 		return "";
@@ -352,7 +394,7 @@ class listdir_t:
 	def listdir(self, path = ""):
 		os.system(("dir " if IS_WIN else "ls ") + ('"' + path + '"' if (path) else ""));
 
-ls = LS = listdir = LISTDIR = listdir_t();
+ls = list_dir = list_dir_t();
 
 
 
@@ -380,7 +422,7 @@ class list_tree_t:
 				print("\t" * totalSpace + fn);
 
 
-listtree = list_tree_t();
+list_tree = list_tree_t();
 
 
 
@@ -449,11 +491,11 @@ def download_youtube(url: str, dl_type: str = "video"):
 			playlist = pytube.Playlist(url);
 			video_urls = playlist.urls;
 		
-			print(f"NOTE: プレイリスト {url} のダウンロードを始める");
+			print(f"NOTE: download_youtube: プレイリスト {url} のダウンロードを始める");
 		
 		else:
 			video_urls.append(url);
-			print(f"NOTE: {dl_type} {url} のダウンロードを始める");
+			print(f"NOTE: download_youtube: {dl_type} {url} のダウンロードを始める");
 		
 
 		success_count = 0;
@@ -463,7 +505,7 @@ def download_youtube(url: str, dl_type: str = "video"):
 				yt = pytube.YouTube(video_url);
 				adjusted_title = yt.title[:20];
 			except:
-				print(f"ERROR: {dl_type} {url} ダウンロードに失敗しました!");
+				print(f"ERROR: download_youtube: {dl_type} {url} ダウンロードに失敗しました!");
 				continue;
 			
 
@@ -478,7 +520,7 @@ def download_youtube(url: str, dl_type: str = "video"):
 					best_score = score;
 
 			if (best_stream == None):
-				print(f"ERROR: {dl_type} {adjusted_title} に最適なストリームが見つかりませんでした!");
+				print(f"ERROR: download_youtube: {dl_type} {adjusted_title} に最適なストリームが見つかりませんでした!");
 				continue;
 
 			file = best_stream.download();
@@ -487,7 +529,7 @@ def download_youtube(url: str, dl_type: str = "video"):
 				try:
 					audio = pydub.AudioSegment.from_file(file);
 				except:
-					print(f"ERROR: {adjusted_title} の MP3 変換に失敗しました!");
+					print(f"ERROR: download_youtube: {adjusted_title} の MP3 変換に失敗しました!");
 					continue;
 				
 				audio.export(file.rsplit(os.extsep, 1)[0] + ".mp3", format = "mp3");
@@ -495,7 +537,7 @@ def download_youtube(url: str, dl_type: str = "video"):
 		
 			success_count += 1;
 
-		print("NOTE: %s %s のダウンロードが完了しました (%d/%d)" % (
+		print("NOTE: download_youtube: %s %s のダウンロードが完了しました (%d/%d)" % (
 			dl_type, url, success_count, len(video_urls)
 		));
 
@@ -550,14 +592,14 @@ class attendance_t:
 			global clipboard;
 			clipboard = load_library(clipboard, "clipboard");
 
-			print("NOTE: input from clipboard");
+			print("NOTE: download_youtube: input from clipboard");
 			raw = clipboard.paste();
 		
 		if (raw.count('\n') == 0):
 			try:
 				raw = open(raw);
 			except FileNotFoundError:
-				print(f"ERROR: the input detected as file, but couldn't found that ({raw})");
+				print(f"ERROR: download_youtube: the input detected as file, but couldn't found that ({raw})");
 		
 		if (type(raw) == _io.TextIOWrapper):
 			file = raw;
@@ -860,7 +902,7 @@ def load_dataframe(file: str = None, low_memory: bool|None = None):
 		file = ask_file([("CSV files", "*.csv"), ("All files", "*.*")]);
 
 		if (not file):
-			print("ERROR: No file chosen!");
+			print("ERROR: load_dataframe: No file chosen!");
 			return;
 
 	# == loads ==
@@ -879,7 +921,7 @@ def load_dataframe(file: str = None, low_memory: bool|None = None):
 	if (file_type == "xml"):
 		return pd.read_xml(file);
 
-	print(f"ERROR: Unsupported file type: {file_type}");
+	print(f"ERROR: load_dataframe: Unsupported file type: {file_type}");
 
 load_csv = load_dataframe;
 load_excel = load_dataframe;
