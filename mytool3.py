@@ -939,6 +939,12 @@ def methods(obj: any, findname: str = None, show_content: bool = True, show_colo
 
 
 
+# old names exchange
+
+list_object_methods = methods;
+
+
+
 
 
 # == pandas ==
@@ -1025,3 +1031,4 @@ __all__ = [method for method in globals().keys()
 		"clear_t", "chdir_t", "list_dir_t", "list_tree_t"
 	]
 ];
+
