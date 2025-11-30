@@ -1,4 +1,4 @@
-PROGRAM_VERSION = "3.0.0"
+PROGRAM_VERSION = "3.1.0"
 
 # == library ==
 
@@ -32,29 +32,38 @@ plt = None;
 
 # load method
 
-def load_library(var, library_name: str|None, install_name: str|None = None):
-    if (var):
-        return var;
+def load_library(var, library_name: str|None, install_name: str|None = None, install_message: bool = True, upgrade: bool = False):
+	if (var):
+		return var;
 
-    try:
-        spec = importlib.util.find_spec(library_name);
-    except:
-        spec = None;
+	try:
+		spec = importlib.util.find_spec(library_name);
+	except:
+		spec = None;
 
-    if (spec == None):
-        if (install_name == None):
-            install_name = library_name;
-        
-        subprocess.run(
-            ["py", "-m", "pip", "install", install_name, "--quiet"],
-            stdout = subprocess.DEVNULL,
-            stderr = subprocess.DEVNULL
-        );
+	if (spec == None):
+		if (install_name == None):
+			install_name = library_name;
+		
+		if (install_message):
+			print(f"NOTE: load_library: installing library {install_name}...");
+		
 
-    if (library_name == None):
-         return None;
+		args = ["py", "-m", "pip", "install", install_name, "--quiet"];
 
-    return importlib.import_module(library_name);
+		if (upgrade):
+			args.append("--upgrade");
+
+		subprocess.run(
+			args,
+			stdout = subprocess.DEVNULL,
+			stderr = subprocess.DEVNULL
+		);
+
+	if (library_name == None):
+			return None;
+
+	return importlib.import_module(library_name);
 
     
 
@@ -82,7 +91,7 @@ TERMCOLOR_GRAY: str = "\x1b[2m"
 
 # == ask_file ==
 
-def ask_file(file_types: list = [tuple[str, str]]):
+def ask_file(file_types: list[tuple[str, str]] = [("All Files", "*")]):
 	global tkinter_filedialog;
 	tkinter_filedialog = load_library(tkinter_filedialog, "tkinter.filedialog", "tkinter");
 
@@ -273,24 +282,43 @@ def play_video(video = None, window_name: str = "play_video", fullscreen: bool =
 
 # == image ==
 
+def is_pil_image(image):
+	type_image = type(image);
+	return type_image.__name__.find("PIL.", 0, 0) == 0 and type_image.__name__.find("Image") != -1;
+
+
+
+def pil_image_to_cv2_image(image):
+	global numpy;
+	numpy = load_library(numpy, "numpy");
+
+	numpy_img = numpy.array(image);
+	return cv2.cvtColor(numpy_img, cv2.COLOR_RGB2BGR);
+
+def cv2_image_to_pil_image(image):
+	global cv2, pil_image;
+	pil_image = load_library(pil_image, "PIL.Image", "pillow");
+	cv2 = load_library(cv2, "cv2", "opencv-python");
+
+	frame_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB);
+	return pil_image.fromarray(frame_rgb);
+
+
+
 def load_image(file: str|None = None):
 	global pil_image, numpy, cv2;
 	pil_image = load_library(pil_image, "PIL.Image", "pillow");
+	cv2 = load_library(cv2, "cv2", "opencv-python");
 
-	param_type = type(file);
-	if (param_type.__name__ == "numpy.ndarray"):
+	type_file = type(file);
+	if (type_file.__name__ == "numpy.ndarray"):
 		return file;
 
-	if (param_type == str):
-		cv2 = load_library(cv2, "cv2", "opencv-python");
+	if (type_file == str):
 		return cv2.imread(file);
 
-	if (param_type.__name__.find("PIL.", 0, 0) == 0 and param_type.__name__.find("Image") != -1):
-		cv2 = load_library(cv2, "cv2", "opencv-python");
-		numpy = load_library(numpy, "numpy");
-
-		numpy_img = numpy.array(file);
-		return cv2.cvtColor(numpy_img, cv2.COLOR_RGB2BGR);
+	if (is_pil_image(file)):
+		return pil_image_to_cv2_image(file);
 
 	if (file == None):
 		filename = ask_file([("Image file", ".png *jpg *.jpeg *.ico"), ("All files", "*.*")]);
@@ -299,10 +327,19 @@ def load_image(file: str|None = None):
 			print("ERROR: load_image: No file chosen!");
 			return;
 
-		video = cv2.VideoCapture(filename);
+		video = cv2.imread(filename);
 		return video;
 
-	print("ERROR: load_image: invaild input type " + param_type.__name__);
+	print(f"ERROR: load_image: invaild input type {type_file.__name__}!");
+
+
+
+def get_image_size(image) -> tuple[int, int, int]:
+	if (is_pil_image(image)):
+		return image.size;
+
+	return load_image(image).shape[0:2];
+
 
 
 
@@ -324,13 +361,10 @@ def write_images_to_gif(frames: list|str, output: str, duration: int, loop: int 
 	elif (type(frames) == list):
 		for frame in frames:
 			if (type(frame).__name__ == "numpy.ndarray"):
-				cv2 = load_library(cv2, "cv2", "opencv-python");
-
-				frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB);
-				frames_real.append(pil_image.fromarray(frame_rgb));
+				frames_real.append(cv2_image_to_pil_image(frame));
 				continue;
 		
-			frames_real.append(frame_rgb);
+			frames_real.append(frame);
 
 
 		frames_real = frames;
@@ -460,17 +494,6 @@ def write_audio_to_mp3(file: str, dest: str):
 
 
 def download_youtube(url: str, dl_type: str = "video"):
-	# == load library ==
-
-	global pytube, pydub;
-	load_library(None, None, "ffmpeg");
-
-	pytube = load_library(pytube, "pytube");
-	pydub = load_library(pydub, "pydub");
-
-
-	# == download thread ==
-
 	def rate_stream(stream, dl_type: str) -> int:
 		quality_str: str = None;
 		if (dl_type == "audio"):
@@ -485,6 +508,16 @@ def download_youtube(url: str, dl_type: str = "video"):
 		return int(quality_str);
 
 	def work_thread(url, dl_type: str = "video"):
+		# == load library ==
+
+		global pytube, pydub;
+		load_library(None, None, "ffmpeg");
+
+		pytube = load_library(pytube, "pytube", upgrade = True);
+		pydub = load_library(pydub, "pydub");
+
+		# == download ==
+
 		video_urls = [];
 
 		if (url.find("https://www.youtube.com/playlist", 0) == 0):
@@ -695,40 +728,56 @@ def get_string_view_length(text: str) -> int:
 	return length;
 
 
-def translated_help(obj: any, language: str = "ja"):
-	### 情報表示 ###
-	objType = type(obj);
-	print(TERMCOLOR_YELLOW + "クラス: %s.%s" % (
-		objType.__module__,
-		objType.__name__
-	) + TERMCOLOR_CLEAR);
+def details(obj: any, language: str = "ja"):
+	# == content ==
 
-	### コメント表示 ###
+	content = repr(obj);
+	lines = content.splitlines();
+
+	print();
+	print("    " + "\n    ".join(lines[:12]));
+
+	if (len(lines) > 12):
+		print("    ...");
+	
+	print();
+	
+	# == 情報表示 ==
+
+	object_type = type(obj);
+	print(f"\x1b[32mクラス: {object_type.__module__}.{object_type.__name__}\x1b[0m");
 
 	# コメントがない
 	if (not obj.__doc__):
-		print(TERMCOLOR_GRAY + "コメントがありません!" + TERMCOLOR_CLEAR);
+		print("\x1b[2mこのメソッドにコメントがありません!\x1b[0m");
+		print();
+		return;
 
 	# 原文で表示
-	elif (not language):
+	if (not language):
 		print(obj.__doc__);
+		print();
+		return;
 	
 	# 訳文で表示
-	else:
-		global googletrans, translator;
-		googletrans = load_library(googletrans, "googletrans");
-		if (translator == None):
-			translator = googletrans.Translator();
+	global googletrans, translator;
+	googletrans = load_library(googletrans, "googletrans", "googletrans==4.0.0rc1");
 
-		length = len(obj.__doc__);
-		for i in range(length // 5000 + (1 if length % 5000 else 0)):
-			content = translator.translate(obj.__doc__[i * 5000  : i + 4999], dest = language);
-			print(content.text);
+	if (translator == None):
+		translator = googletrans.Translator();
+
+
+	length = len(obj.__doc__);
+
+	for i in range(length // 5000 + (1 if length % 5000 else 0)):
+		content = translator.translate(obj.__doc__[i * 5000  : i + 4999], dest = language);
+		print(content.text);
+		time.sleep(1);
 	
 	print();
 
 
-def list_object_methods(obj: any, findname: str = None, details: bool = True, colors: bool = True):
+def methods(obj: any, findname: str = None, show_content: bool = True, show_colors: bool = True):
 	METHODCOLOURS = [
 		TERMCOLOR_GREEN,
 		TERMCOLOR_BOLD + TERMCOLOR_YELLOW,
@@ -798,7 +847,7 @@ def list_object_methods(obj: any, findname: str = None, details: bool = True, co
 	firstResults = [];
 	secondResults = [];
 	thirdResults = [];
-	longestNameLength = 0;
+	longest_name_length = 0;
 	
 	for methodName in dir(obj):
 		methodInfo = [METHOD_NORMAL, methodName, None];
@@ -821,10 +870,10 @@ def list_object_methods(obj: any, findname: str = None, details: bool = True, co
 			firstResults.append(methodInfo);
 
 		# Longest name length for print table
-		longestNameLength = max(longestNameLength, len(methodName));
+		longest_name_length = max(longest_name_length, len(methodName));
 
 		# Collect method type and expand info if showdetails enabled
-		if (details):
+		if (show_content):
 			read_method_info(obj, methodName, methodInfo);
 
 	
@@ -832,8 +881,8 @@ def list_object_methods(obj: any, findname: str = None, details: bool = True, co
 
 	termWidth = os.get_terminal_size()[0];
 	
-	longestNameLength = min(termWidth, longestNameLength + 1);
-	rowLength	= termWidth // longestNameLength;
+	longest_name_length = min(termWidth, longest_name_length + 1);
+	rowLength	= termWidth // longest_name_length;
 	indexLength	= termWidth // rowLength;
 	
 	firstResults.sort();
@@ -869,9 +918,9 @@ def list_object_methods(obj: any, findname: str = None, details: bool = True, co
 		# Print and count
 
 		print("%s%s%s%s" % (
-			METHODCOLOURS[info[0]] if (colors) else "",
+			METHODCOLOURS[info[0]] if (show_colors) else "",
 			display_name,
-			"\x1b[0m" if (colors and details) else "",
+			"\x1b[0m" if (show_colors and show_content) else "",
 			" " * max(1, indexLength - length)
 		), end = "");
 
@@ -973,6 +1022,6 @@ __all__ = [method for method in globals().keys()
 	if method not in [
 		"_io", "importlib", ""
 		"cv2", "pil_image", "numpy", "pytube", "pydub", "tkinter_filedialog", "googletrans", "translator", "clipboard", "pd",
-		"clear_t", "chdir_t", "listdir_t", "list_tree_t"
+		"clear_t", "chdir_t", "list_dir_t", "list_tree_t"
 	]
 ];
