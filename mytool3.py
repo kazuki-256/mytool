@@ -1,4 +1,4 @@
-PROGRAM_VERSION = "3.1.0"
+PROGRAM_VERSION = "3.1.1"
 
 # == library ==
 
@@ -95,14 +95,8 @@ def ask_file(file_types: list[tuple[str, str]] = [("All Files", "*")]):
 	global tkinter_filedialog;
 	tkinter_filedialog = load_library(tkinter_filedialog, "tkinter.filedialog", "tkinter");
 
-	file = tkinter_filedialog.askopenfile(filetypes = file_types);
-
-	if (not file):
-		return "";
-
-	filename = file.name;
-	file.close();
-	return filename;
+	file = tkinter_filedialog.askopenfilename(filetypes = file_types);
+	return file;
 
 
 
@@ -159,6 +153,8 @@ def play_video(video = None, window_name: str = "play_video", fullscreen: bool =
     cv2 = load_library(cv2, "cv2", "opencv-python");
 
     video = load_video(video);
+    if (video == None):
+        return;
 
     video.set(1, 0);
 
@@ -167,7 +163,7 @@ def play_video(video = None, window_name: str = "play_video", fullscreen: bool =
     V_FRAME_COUNT = video.get(7);
 
     V_FPS = get_video_fps(video);
-    FRAME_DELAY = round(1000 / V_FPS);
+    V_DURATION = get_video_duration(video);
 
     cv2.namedWindow(window_name,
         cv2.WINDOW_FULLSCREEN if fullscreen else cv2.WINDOW_NORMAL
@@ -187,23 +183,30 @@ def play_video(video = None, window_name: str = "play_video", fullscreen: bool =
     now = -1;
 
     while (True):
+        start = cv2.getTickCount();
+		
         if (playing or not ret):
             ret, frame = video.read();
             now += 1;
 
             if (ret == False):
                 if (loop == True):
-                    cv2.set(1, 0);
+                    video.set(1, 0);
                 else:
-                    cv2.set(1, V_FRAME_COUNT - 1);
+                    video.set(1, V_FRAME_COUNT - 1);
             
                 ret, frame = video.read();
 
             cv2.imshow(window_name, frame);
 
+        end = cv2.getTickCount();
 
-        key = cv2.waitKeyEx(FRAME_DELAY);
 
+		# delay_time around 1 to V_DURATION, calculate by V_DURATION - used_time
+        used_time = (end - start) / 1e6;
+        delay_time = int(max(1, min(V_DURATION, V_DURATION - used_time)));
+
+        key = cv2.waitKeyEx(delay_time);
 
         # == exit handle ==
 
@@ -946,7 +949,6 @@ list_object_methods = methods;
 
 
 
-
 # == pandas ==
 
 def load_dataframe(file: str = None, low_memory: bool|None = None):
@@ -1031,4 +1033,3 @@ __all__ = [method for method in globals().keys()
 		"clear_t", "chdir_t", "list_dir_t", "list_tree_t"
 	]
 ];
-
